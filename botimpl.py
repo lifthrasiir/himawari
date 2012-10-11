@@ -313,3 +313,4 @@ def msg(channel, source, msg):
 
 def welcome(channel):
     bot.say(channel, '안녕하세요. 뻘글 생산봇 %s입니다. 저는 \\로 시작하는 말에 반응해요. 자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하시고요.' % bot.NICK)
+

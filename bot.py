@@ -106,3 +106,4 @@ while True:
     while not select.select([s.fileno()], [], [], max(0, nexttime - time.time()))[0]:
         if nexttime < time.time(): nexttime = time.time() + botimpl.TICK
         safeexec(None, getattr(botimpl, 'idle', None))
+
