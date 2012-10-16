@@ -229,9 +229,14 @@ def dbcmd(channel, source, msg):
                             say(channel, u'그런 거 업ㅂ다.')
                             return
                         elif len(rows) > 1:
-                            say(channel, u'너무 많아서 고칠 수가 없어요. 좀 더 자세히 써 주세요.')
-                            return
-                        origvalue = rows[0][0]
+                            # 정확히 매칭하는 게 있으면 그걸 우선시한다.
+                            if any(v == original for v, in rows):
+                                origvalue = original
+                            else:
+                                say(channel, u'너무 많아서 고칠 수가 없어요. 좀 더 자세히 써 주세요.')
+                                return
+                        else:
+                            origvalue = rows[0][0]
                         value = origvalue.replace(original, replacement)
                         if value:
                             DB.execute('update or replace templates set value=?, updated_by=?, updated_at=? '
