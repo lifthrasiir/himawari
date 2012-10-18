@@ -306,7 +306,7 @@ def call(channel, source, msg):
         bot.send('PART %s :%s' % (channel, u'사쿠라코는 오늘 점심 없어요.'.encode('utf-8')))
     else:
         say(channel, u'%s 뻘글 생산봇입니다. 자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하세요.' %
-                attach_postposition(bot.NICK, u'는'))
+                attach_postposition(bot.NICK.decode('utf-8'), u'는'))
 
 def msg(channel, source, msg):
     msg = msg.decode('utf-8', 'replace')
