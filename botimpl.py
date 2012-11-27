@@ -125,6 +125,7 @@ class Renderer(object):
         return None
 
     def render(self, key, index=u''):
+        key = key.upper()
         keyindex = key + index
         try:
             return self.cache[keyindex]
@@ -152,7 +153,7 @@ class Renderer(object):
                         pass
                 return m.group(0)
             text = re.sub(
-                    ur'\{([가-힣]+)([0-9a-zA-Z]*)\}'
+                    ur'\{(?![0-9])([가-힣ㄱ-ㅎㅏ-ㅣ0-9a-zA-Z]*[가-힣])([0-9a-zA-Z]*)\}'
                         ur'((?:(?:[은는이가와과을를다로]|이다|으로)(?![가-힣])|[였]|이었|라고|이라고)?)|'
                     ur'\{(\d+)[-~](\d+)\}', repl, text)
             self.cache[keyindex] = text
