@@ -187,10 +187,14 @@ def calling_me(msg):
 
 
 lastchannel = None
+lastidlesay = None
 
 def idle():
+    global lastidlesay
     if random.randint(0, 29): return # 1/30 확률
-    if lastchannel:
+    t = int(time.time())
+    if lastchannel and (lastidlesay is None or lastidlesay + 3600 < t):
+        lastidlesay = t
         say(lastchannel, get_renderer(lastchannel, None).render(u'심심할때'))
 
 def dbcmd(channel, source, msg):
