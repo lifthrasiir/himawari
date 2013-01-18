@@ -76,6 +76,9 @@ while True:
         ch = s.recv(1)
         if ch == '': break
         line += ch
+    if not line:
+        print '*** connection failed'
+        break
     line = line.rstrip('\r\n')
     print '<<', line
     m = LINEPARSE.match(line)
