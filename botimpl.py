@@ -228,7 +228,7 @@ def dbcmd(channel, source, msg):
                     replacement = replacement.strip()
                     if original:
                         c = DB.execute('select value from templates where scope=? and key=? and value like ? escape ?;',
-                                (scope, key, u'%%%s%%' % original.replace('|','||').replace('_','|_').replace('%','|%'), u'%'))
+                                (scope, key, u'%%%s%%' % original.replace('|','||').replace('_','|_').replace('%','|%'), u'|'))
                         rows = c.fetchall()
                         if len(rows) < 1:
                             say(channel, u'그런 거 업ㅂ다.')
