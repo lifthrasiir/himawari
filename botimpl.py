@@ -118,6 +118,7 @@ KEYNAME_YOU        = u'너' # 봇에게 명령을 내린 주체를 가리킴
 KEYNAME_HERE       = u'여기'
 KEYNAME_THISCHAN   = u'이채널'
 KEYNAME_SOMEONE    = u'누군가'
+KEYNAME_NONE       = u'없음'
 KEYNAME_AFTERSAVE  = u'저장후'
 KEYNAME_AFTERRESET = u'리셋후'
 KEYNAME_NOKEY      = u'없는키'
@@ -135,6 +136,7 @@ READONLY_KEYS = {
     KEYNAME_HERE:       u'명령을 받은 장소',
     KEYNAME_THISCHAN:   u'명령을 받은 채널명',
     KEYNAME_SOMEONE:    u'명령을 받은 채널의 아무 사람이나 부르는 용도', # TODO
+    KEYNAME_NONE:       u'빈 문자열로 치환하기 위한 용도',
     KEYNAME_ALLKEYS:    u'전체 키 목록을 출력하는 용도',
     KEYNAME_SAY:        u'저장 없이 문법을 테스트하는 용도',
 }
@@ -187,7 +189,7 @@ class Renderer(object):
                 if chosen < last: return value
         return None
 
-    def render(self, key, index=u''):
+    def render(self, key, index=u'', default=u''):
         key = key.upper()
         keyindex = key + index
         try:
@@ -196,7 +198,7 @@ class Renderer(object):
             try:
                 return self.cache[key]
             except KeyError:
-                self.cache[keyindex] = u'' # 무한루프 돌 경우 처리
+                self.cache[keyindex] = default # 무한루프 돌 경우 처리
 
         used = self.used.setdefault(key, set())
         text = self._random_candidate(key, used)
@@ -206,13 +208,14 @@ class Renderer(object):
             self.cache[keyindex] = text
             return text
         else:
-            return u''
+            return default
 
     def apply_syntax(self, key, text):
         def repl(m):
             if m.group('key'):
                 index = m.group('index') or (u'\0' + key) # {사람}이라고만 쓴 건 key-local
-                return attach_postposition(self.render(m.group('key'), index), m.group('postpos'))
+                text = self.render(m.group('key'), index, default=u'{%s}' % m.group('key'))
+                return attach_postposition(text, m.group('postpos'))
             if m.group('lbound'):
                 try:
                     lbound = int(m.group('lbound'))
@@ -233,11 +236,14 @@ def channel_scope(channel):
     return channel.decode('utf-8', 'replace')
 
 def get_renderer(channel, source):
-    vars = {u'나': bot.NICK.decode('utf-8'),
-            u'여기': channel.decode('utf-8', 'replace')[1:],
-            u'이채널': channel.decode('utf-8', 'replace')}
+    vars = {
+        KEYNAME_I: bot.NICK.decode('utf-8'),
+        KEYNAME_HERE: channel.decode('utf-8', 'replace')[1:],
+        KEYNAME_THISCHAN: channel.decode('utf-8', 'replace'),
+        KEYNAME_NONE: u'',
+    }
     if source:
-        vars[u'너'] = source.split('!')[0].decode('utf-8', 'replace')
+        vars[KEYNAME_YOU] = source.split('!')[0].decode('utf-8', 'replace')
     return Renderer(channel_scope(channel), vars)
 
 def say(to, s):
@@ -343,7 +349,7 @@ def dblist(channel, source, key):
     else:
         r = get_renderer(channel, source)
         r[KEYNAME_KEY] = key
-        text = r.render(KEYNAME_NOKEY) or u'그따위 거 몰라요.'
+        text = r.render(KEYNAME_NOKEY, default=u'그따위 거 몰라요.')
     say(channel, text)
 
 def dbget(channel, source, key, args=()):
