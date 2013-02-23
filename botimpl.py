@@ -115,14 +115,15 @@ KEYNAME_YOU        = u'너' # 봇에게 명령을 내린 주체를 가리킴
 KEYNAME_HERE       = u'여기'
 KEYNAME_THISCHAN   = u'이채널'
 KEYNAME_SOMEONE    = u'누군가'
-KEYNAME_IDLE       = u'심심할때'
 KEYNAME_AFTERSAVE  = u'저장후'
 KEYNAME_AFTERRESET = u'리셋후'
 KEYNAME_NOKEY      = u'없는키'
 KEYNAME_ALLKEYS    = u'모든키'
 KEYNAME_USAGE      = u'도움말'
-KEYNAME_INTRO      = u'인사말'
+KEYNAME_IDLE       = u'심심할때'
+KEYNAME_SELFINTRO  = u'들어올때'
 KEYNAME_DYINGMSG   = u'나갈때'
+KEYNAME_ONJOIN     = u'인사말'
 KEYNAME_SAY        = u'말해'
 
 READONLY_KEYS = {
@@ -137,12 +138,13 @@ READONLY_KEYS = {
 SPECIAL_KEYS = {
     KEYNAME_KEY:        u'종종 입력한 키로 덮어 씌우는 용도',
     KEYNAME_VALUE:      u'종종 입력한 값으로 덮어 씌우는 용도',
-    KEYNAME_IDLE:       u'일정한 주기로 아무 말이나 출력시키기 위한 용도',
     KEYNAME_AFTERSAVE:  u'값을 저장한 뒤에 나올 메시지',
     KEYNAME_AFTERRESET: u'값을 지운 뒤에 나올 메시지',
     KEYNAME_NOKEY:      u'값이 없을 때 나올 메시지',
-    KEYNAME_INTRO:      u'채널에 초대받았을 때 인사말',
+    KEYNAME_IDLE:       u'일정한 주기로 아무 말이나 출력시키기 위한 용도',
+    KEYNAME_SELFINTRO:  u'채널에 초대받았을때 나올 메시지',
     KEYNAME_DYINGMSG:   u'채널에서 나갈때 나올 메시지',
+    #KEYNAME_ONJOIN:     u'다른 사람이 채널에 들어올때 인사말',
     KEYNAME_USAGE:      u'도움말',
 }
 
@@ -272,7 +274,7 @@ def dbadd(channel, source, key, value):
                 (scope, key, value, source.decode('utf-8', 'replace'), int(time.time())))
 
     if key in SPECIAL_KEYS:
-        say(channel, u'이 키는 %s 쓰여요. 원하는 게 맞는지 다시 확인해 보세요.' %
+        say(channel, u'이 키는 %s 쓰여요. 저장은 되었지만 원하는 게 맞는지 다시 확인해 보세요.' %
                      attach_postposition(SPECIAL_KEYS[key], u'로'))
     else:
         r = get_renderer(channel, source)
@@ -308,8 +310,8 @@ def dbreplace(channel, source, key, original, replacement):
         else:
             DB.execute('delete from templates where scope=? and key=? and value=?;', (scope, key, origvalue))
 
-    if key in SPECIAL_KEYS:
-        say(channel, u'이 키는 %s 쓰여요. 원하는 게 맞는지 다시 확인해 보세요.' %
+    if key in SPECIAL_KEYS and value: # 삭제할 경우 경고가 필요 없음
+        say(channel, u'이 키는 %s 쓰여요. 저장은 되었지만 원하는 게 맞는지 다시 확인해 보세요.' %
                      attach_postposition(SPECIAL_KEYS[key], u'로'))
     else:
         r = get_renderer(channel, source)
@@ -435,7 +437,7 @@ def msg(channel, source, msg):
 
 def welcome(channel):
     r = get_renderer(channel, None)
-    reply = r.render(KEYNAME_INTRO) or (u'안녕하세요. 뻘글 생산봇 %s입니다. 저는 \\로 시작하는 말에 반응해요. '
-                                        u'자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하시고요.' % bot.NICK.decode('utf-8'))
+    reply = r.render(KEYNAME_SELFINTRO) or (u'안녕하세요. 뻘글 생산봇 %s입니다. 저는 \\로 시작하는 말에 반응해요. '
+                                            u'자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하시고요.' % bot.NICK.decode('utf-8'))
     say(channel, reply)
 
