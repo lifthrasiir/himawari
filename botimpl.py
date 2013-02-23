@@ -132,7 +132,7 @@ READONLY_KEYS = {
     KEYNAME_THISCHAN:   u'명령을 받은 채널명',
     KEYNAME_SOMEONE:    u'명령을 받은 채널의 아무 사람이나 부르는 용도', # TODO
     KEYNAME_ALLKEYS:    u'전체 키 목록을 출력하는 용도',
-    KEYNAME_SAY:        u'저장 없이 문법을 테스트하는 용도', # TODO
+    KEYNAME_SAY:        u'저장 없이 문법을 테스트하는 용도',
 }
 SPECIAL_KEYS = {
     KEYNAME_KEY:        u'종종 입력한 키로 덮어 씌우는 용도',
