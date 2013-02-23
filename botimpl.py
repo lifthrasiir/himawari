@@ -197,27 +197,32 @@ class Renderer(object):
         text = self._random_candidate(key, used)
         if text is not None:
             used.add(text)
-            def repl(m):
-                if m.group('key'):
-                    index = m.group('index') or (u'\0' + key) # {사람}이라고만 쓴 건 key-local
-                    return attach_postposition(self.render(m.group('key'), index), m.group('postpos'))
-                if m.group('lbound'):
-                    try:
-                        lbound = int(m.group('lbound'))
-                        ubound = int(m.group('ubound'))
-                        minwidth = min(len(m.group('lbound')), len(m.group('ubound')))
-                        return str(random.randint(lbound, ubound)).zfill(minwidth)
-                    except Exception:
-                        pass
-                return m.group(0)
-            text = re.sub(
-                    ur'\{(?![0-9])(?P<key>' + KEY_PATTERN + ur'|\$[1-9][0-9]*)(?P<index>[0-9a-zA-Z]*)\}'
-                        ur'(?P<postpos>(?:(?:[은는이가와과을를다로]|이다|으로)(?![가-힣])|[였]|이었|라고|이라고)?)|'
-                    ur'\{(?P<lbound>\d+)[-~](?P<ubound>\d+)\}', repl, text)
+            text = self.apply_syntax(key, text)
             self.cache[keyindex] = text
             return text
         else:
             return u''
+
+    def apply_syntax(self, key, text):
+        def repl(m):
+            if m.group('key'):
+                index = m.group('index') or (u'\0' + key) # {사람}이라고만 쓴 건 key-local
+                return attach_postposition(self.render(m.group('key'), index), m.group('postpos'))
+            if m.group('lbound'):
+                try:
+                    lbound = int(m.group('lbound'))
+                    ubound = int(m.group('ubound'))
+                    minwidth = min(len(m.group('lbound')), len(m.group('ubound')))
+                    return str(random.randint(lbound, ubound)).zfill(minwidth)
+                except Exception:
+                    pass
+            return m.group(0)
+
+        text = re.sub(
+                ur'\{(?![0-9])(?P<key>' + KEY_PATTERN + ur'|\$[1-9][0-9]*)(?P<index>[0-9a-zA-Z]*)\}'
+                    ur'(?P<postpos>(?:(?:[은는이가와과을를다로]|이다|으로)(?![가-힣])|[였]|이었|라고|이라고)?)|'
+                ur'\{(?P<lbound>\d+)[-~](?P<ubound>\d+)\}', repl, text)
+        return text
 
 def channel_scope(channel):
     return channel.decode('utf-8', 'replace')
@@ -359,7 +364,10 @@ def dbcmd(channel, source, msg):
         key = (m.group('key') or u'').strip()
         value = m.group('value').strip()
         if value:
-            if key in READONLY_KEYS:
+            if key == KEYNAME_SAY:
+                r = get_renderer(channel, source)
+                say(channel, r.apply_syntax(u'', value))
+            elif key in READONLY_KEYS:
                 say(channel, u'이 키는 %s 쓰이기 때문에 저장할 수 없어요.' %
                              attach_postposition(READONLY_KEYS[key], u'로'))
             else:
@@ -380,7 +388,11 @@ def dbcmd(channel, source, msg):
     m = re.search(ur'^\s*(?:(?P<key>' + KEY_PATTERN + ur')\s*)?\?\?\s*$', msg)
     if m:
         key = (m.group('key') or u'').strip()
-        dblist(channel, source, key)
+        if key in READONLY_KEYS:
+            say(channel, u'이 키는 %s 쓰여서 읽어올 수 없어요.' %
+                         attach_postposition(READONLY_KEYS[key], u'로'))
+        else:
+            dblist(channel, source, key)
         return
 
     # 기본 템플릿 사용 "?" (특수 처리해야 함)
@@ -393,7 +405,11 @@ def dbcmd(channel, source, msg):
     if m:
         key = m.group('key').strip()
         args = (m.group('args') or u'').split()
-        if key: dbget(channel, source, key, args)
+        if key in READONLY_KEYS:
+            say(channel, u'이 키는 %s 쓰여서 읽어올 수 없어요.' %
+                         attach_postposition(READONLY_KEYS[key], u'로'))
+        elif key:
+            dbget(channel, source, key, args)
         return
 
     # 기본값
