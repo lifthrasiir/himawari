@@ -36,57 +36,62 @@ DB.executescript('''
         value text not null);
 ''')
 
-def migrate(default_scope):
-    import shelve
-    Database = shelve.open('./himawari-old.db', 'r', protocol=-1, writeback=True)
-    for k, vv in Database.get('templates', {}).items():
-        for v in vv:
-            DB.execute('insert into templates(scope,key,value,updated_by,updated_at) values(?,?,?,?,?);',
-                    (default_scope, k, v, u'<대우주의 거대한 의지>', int(time.time())))
-    DB.commit()
-
 
-POSTPOS = {
-    # 조사: (받침 없을 때, 받침 있을 때, 어째 모르겠을 때),
-    u'을': (u'를', u'을', u'을(를)'),
-    u'를': (u'를', u'을', u'를(을)'),
-    u'은': (u'는', u'은', u'은(는)'),
-    u'는': (u'는', u'은', u'는(은)'),
-    u'이': (u'가', u'이', u'이(가)'),
-    u'가': (u'가', u'이', u'가(이)'),
-    u'과': (u'와', u'과', u'과(와)'),
-    u'와': (u'와', u'과', u'와(과)'),
-    u'이다': (u'다', u'이다', u'(이)다'),
-    u'다': (u'다', u'이다', u'(이)다'),
-    u'으로': (u'로', u'으로', u'(으)로'),
-    u'로': (u'로', u'으로', u'(으)로'),
-    u'였': (u'였', u'이었', u'였(이었)'),
-    u'이었': (u'였', u'이었', u'이었(였)'),
-    u'에요': (u'에요', u'이에요', u'(이)에요'),
-    u'이에요': (u'에요', u'이에요', u'(이)에요'),
-    u'라고': (u'라고', u'이라고', u'(이)라고'),
-    u'이라고': (u'라고', u'이라고', u'(이)라고'),
-    u'': (u'', u'', u''),
-}
+POSTPOS = [
+    # (받침 없을 때, 받침 있을 때, ㄹ를 받침 없는 경우로 간주하는가?)
+    # 순서대로 매칭되므로 긴 것이 앞에 와야 함
+    (u'에요', u'이에요', False),
+    (u'라고', u'이라고', False),
+    (u'를', u'을', False),
+    (u'는', u'은', False),
+    (u'가', u'이', False),
+    (u'와', u'과', False),
+    (u'다', u'이다', False),
+    (u'로', u'으로', True),
+    (u'였', u'이었', False),
+]
+
+def get_reading(alphatext):
+    c = DB.execute(
+        'select value from readings where key in (%s) order by length(key) desc limit 1;' % ','.join(['?'] * len(alphatext)),
+        [alphatext[i:] for i in xrange(len(alphatext))])
+    reading = c.fetchone()
+    return reading and reading[0]
+
+def select_postposition(text, postpos):
+    assert text
+    if not postpos: return u''
+    for nofinal, final, rieulcasing in POSTPOS:
+        isnofinal = postpos.startswith(nofinal)
+        isfinal = postpos.startswith(final)
+        if isnofinal or isfinal:
+            remainder = postpos[len(final if final else nofinal):]
+            if u'가' <= text[-1] <= u'힣':
+                finalidx = (ord(text[-1]) - 0xac00) % 28
+                if finalidx == 0 or (rieulcasing and finalidx == 8):
+                    return nofinal + remainder
+                else:
+                    return final + remainder
+            else: # ambiguity
+                if final.endswith(nofinal):
+                    both = u'(%s)%s' % (final[:-len(nofinal)], nofinal)
+                elif nofinal.endswith(final):
+                    both = u'(%s)%s' % (nofinal[:-len(final)], final)
+                elif isfinal:
+                    both = u'%s(%s)' % (final, nofinal)
+                else:
+                    both = u'%s(%s)' % (nofinal, final)
+                return both + remainder
+    return postpos
 
 def attach_postposition(text, postpos):
     alphatext = filter(unicode.isalpha, text).upper()
     if not alphatext: return text + postpos
-    last = alphatext[-1]
-    nofinal, final, ambig = POSTPOS[postpos]
-    if not (u'가' <= last <= u'힣'):
+    if not (u'가' <= alphatext[-1] <= u'힣'):
         # 적절한 발음이 존재하는지 확인해 본다.
-        c = DB.execute(
-            'select value from readings where key in (%s) order by length(key) desc limit 1;' % ','.join(['?'] * len(alphatext)),
-            [alphatext[i:] for i in xrange(len(alphatext))])
-        reading = c.fetchone()
-        if reading and reading[0]:
-            alphatext = reading[0]
-            last = alphatext[-1]
-        else:
-            return text + ambig
-    if (ord(last) - 0xac00) % 28 == 0: return text + nofinal
-    return text + final
+        reading = get_reading(alphatext)
+        if reading: alphatext = reading
+    return text + select_postposition(alphatext, postpos)
 
 class Renderer(object):
     def __init__(self, scope, context=()):
