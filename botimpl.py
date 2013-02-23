@@ -390,7 +390,7 @@ def dbcmd(channel, source, msg):
     m = re.search(ur'^\s*(?:(?P<key>' + KEY_PATTERN + ur')\s*)?\?\?\s*$', msg)
     if m:
         key = (m.group('key') or u'').strip()
-        if key in READONLY_KEYS:
+        if key in READONLY_KEYS and key != KEYNAME_ALLKEYS:
             say(channel, u'이 키는 %s 쓰여서 읽어올 수 없어요.' %
                          attach_postposition(READONLY_KEYS[key], u'로'))
         else:
