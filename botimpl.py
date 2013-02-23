@@ -16,6 +16,7 @@ import sqlite3
 import binascii
 import struct
 import collections
+from contextlib import contextmanager
 
 if __name__ != '__main__':
     import bot # recursive, but only called in the handler
@@ -35,6 +36,16 @@ DB.executescript('''
         key text not null primary key,
         value text not null);
 ''')
+
+@contextmanager
+def transaction():
+    try:
+        yield DB
+    except Exception:
+        DB.rollback()
+        raise
+    else:
+        DB.commit()
 
 
 POSTPOS = [
@@ -93,6 +104,9 @@ def attach_postposition(text, postpos):
         if reading: alphatext = reading
     return text + select_postposition(alphatext, postpos)
 
+
+KEY_PATTERN = ur'(?:[가-힣ㄱ-ㅎㅏ-ㅣ0-9a-zA-Z]*[가-힣])'
+
 class Renderer(object):
     def __init__(self, scope, context=()):
         self.scope = scope
@@ -145,26 +159,29 @@ class Renderer(object):
         if text is not None:
             used.add(text)
             def repl(m):
-                if m.group(1):
-                    index = m.group(2) or (u'\0' + key) # {사람}이라고만 쓴 건 key-local
-                    return attach_postposition(self.render(m.group(1), index), m.group(3))
-                if m.group(4):
+                if m.group('key'):
+                    index = m.group('index') or (u'\0' + key) # {사람}이라고만 쓴 건 key-local
+                    return attach_postposition(self.render(m.group('key'), index), m.group('postpos'))
+                if m.group('lbound'):
                     try:
-                        lbound = int(m.group(4))
-                        ubound = int(m.group(5))
-                        minwidth = min(len(m.group(4)), len(m.group(5)))
+                        lbound = int(m.group('lbound'))
+                        ubound = int(m.group('ubound'))
+                        minwidth = min(len(m.group('lbound')), len(m.group('ubound')))
                         return str(random.randint(lbound, ubound)).zfill(minwidth)
                     except Exception:
                         pass
                 return m.group(0)
             text = re.sub(
-                    ur'\{(?![0-9])([가-힣ㄱ-ㅎㅏ-ㅣ0-9a-zA-Z]*[가-힣])([0-9a-zA-Z]*)\}'
-                        ur'((?:(?:[은는이가와과을를다로]|이다|으로)(?![가-힣])|[였]|이었|라고|이라고)?)|'
-                    ur'\{(\d+)[-~](\d+)\}', repl, text)
+                    ur'\{(?![0-9])(?P<key>' + KEY_PATTERN + ur'|\$[1-9][0-9]*)(?P<index>[0-9a-zA-Z]*)\}'
+                        ur'(?P<postpos>(?:(?:[은는이가와과을를다로]|이다|으로)(?![가-힣])|[였]|이었|라고|이라고)?)|'
+                    ur'\{(?P<lbound>\d+)[-~](?P<ubound>\d+)\}', repl, text)
             self.cache[keyindex] = text
             return text
         else:
             return u''
+
+def channel_scope(channel):
+    return channel.decode('utf-8', 'replace')
 
 def get_renderer(channel, source):
     vars = {u'나': bot.NICK.decode('utf-8'),
@@ -172,7 +189,7 @@ def get_renderer(channel, source):
             u'이채널': channel.decode('utf-8', 'replace')}
     if source:
         vars[u'너'] = source.split('!')[0].decode('utf-8', 'replace')
-    return Renderer(channel.decode('utf-8'), vars)
+    return Renderer(channel_scope(channel), vars)
 
 def say(to, s):
     if s:
@@ -202,6 +219,86 @@ def idle():
         lastidlesay = t
         say(lastchannel, get_renderer(lastchannel, None).render(u'심심할때'))
 
+def dbadd(channel, source, key, value):
+    assert value
+
+    scope = channel_scope(channel)
+    with transaction():
+        DB.execute('insert or replace into templates(scope,key,value,updated_by,updated_at) values(?,?,?,?,?);',
+                (scope, key, value, source.decode('utf-8', 'replace'), int(time.time())))
+
+    r = get_renderer(channel, source)
+    r[u'키'] = key
+    r[u'값'] = value
+    say(channel, r.render(u'저장후'))
+
+def dbreplace(channel, source, key, original, replacement):
+    # '절씨구'를 포함하는 문자열이 여럿 있으면 에러.
+    # 빈 문자열로 치환될 경우 delete.
+    scope = channel_scope(channel)
+    with transaction():
+        c = DB.execute('select value from templates where scope=? and key=? and value like ? escape ?;',
+                (scope, key, u'%%%s%%' % original.replace('|','||').replace('_','|_').replace('%','|%'), u'|'))
+        rows = c.fetchall()
+        if len(rows) < 1:
+            say(channel, u'그런 거 업ㅂ다.')
+            return
+        elif len(rows) > 1:
+            # 정확히 매칭하는 게 있으면 그걸 우선시한다.
+            if any(v == original for v, in rows):
+                origvalue = original
+            else:
+                say(channel, u'너무 많아서 고칠 수가 없어요. 좀 더 자세히 써 주세요.')
+                return
+        else:
+            origvalue = rows[0][0]
+        value = origvalue.replace(original, replacement)
+        if value:
+            DB.execute('update or replace templates set value=?, updated_by=?, updated_at=? '
+                       'where scope=? and key=? and value=?;',
+                    (value, source.decode('utf-8', 'replace'), int(time.time()), scope, key, origvalue))
+        else:
+            DB.execute('delete from templates where scope=? and key=? and value=?;', (scope, key, origvalue))
+
+    r = get_renderer(channel, source)
+    r[u'키'] = key
+    if value: r[u'값'] = value
+    say(channel, r.render(u'저장후' if value else u'리셋후'))
+
+def dblist(channel, source, key):
+    scope = channel_scope(channel)
+    if key == u'모든키':
+        c = DB.execute('select distinct key from templates where scope=?;', (scope,))
+    else:
+        c = DB.execute('select value from templates where scope=? and key=?;', (scope, key))
+    items = [i for i, in c.fetchall()]
+    if items:
+        random.shuffle(items)
+        text = u'%s: ' % key
+        first = True
+        for i in items:
+            if len(text) > 100:
+                text += u' 등등 총 %d개' % len(items)
+                break
+            if first: first = False
+            else: text += u', '
+            text += i
+    else:
+        r = get_renderer(channel, source)
+        r[u'키'] = key
+        text = r.render(u'없는키') or u'그따위 거 몰라요.'
+    say(channel, text)
+
+def dbget(channel, source, key, args=()):
+    r = get_renderer(channel, source)
+    for i, arg in enumerate(args):
+        r[u'$%d' % (i+1)] = arg
+    text = r.render(key)
+    if not text:
+        r[u'키'] = key
+        text = r.render(u'없는키') or u'그따위 거 몰라요.'
+    say(channel, text)
+
 def dbcmd(channel, source, msg):
     global lastchannel
     lastchannel = channel
@@ -210,100 +307,44 @@ def dbcmd(channel, source, msg):
     # 템플릿 전체 삭제 "얼씨구 ->"
     # TODO
 
-    # 템플릿 선언 "얼씨구: 절씨구", "얼씨구:: 절씨구"(는 이제 없음)
-    #key, sep, value = msg.partition(u'::')
-    sep = None
-    if not sep:
-        key, sep, value = msg.partition(u':')
-    key = key.strip()
-    value = value.strip()
-    if sep == '::' or (sep == ':' and value): # 메인 템플릿이면 키도 비어 있을 수 있음
-        try:
-            if sep == u'::':
-                DB.execute('delete from templates where scope=? and key=?;', (scope, key))
-            if value:
-                # 템플릿 수정: "얼씨구: 절씨구 -> 앗싸리"
-                # '절씨구'를 포함하는 문자열이 여럿 있으면 에러.
-                # 빈 문자열로 치환될 경우 delete.
-                original, sep2, replacement = value.partition(u'->')
-                if not sep2:
-                    original, sep2, replacement = value.partition(u'\u2192')
-                if sep2:
-                    original = original.strip()
-                    replacement = replacement.strip()
-                    if original:
-                        c = DB.execute('select value from templates where scope=? and key=? and value like ? escape ?;',
-                                (scope, key, u'%%%s%%' % original.replace('|','||').replace('_','|_').replace('%','|%'), u'|'))
-                        rows = c.fetchall()
-                        if len(rows) < 1:
-                            say(channel, u'그런 거 업ㅂ다.')
-                            return
-                        elif len(rows) > 1:
-                            # 정확히 매칭하는 게 있으면 그걸 우선시한다.
-                            if any(v == original for v, in rows):
-                                origvalue = original
-                            else:
-                                say(channel, u'너무 많아서 고칠 수가 없어요. 좀 더 자세히 써 주세요.')
-                                return
-                        else:
-                            origvalue = rows[0][0]
-                        value = origvalue.replace(original, replacement)
-                        if value:
-                            DB.execute('update or replace templates set value=?, updated_by=?, updated_at=? '
-                                       'where scope=? and key=? and value=?;',
-                                    (value, source.decode('utf-8', 'replace'), int(time.time()), scope, key, origvalue))
-                        else:
-                            DB.execute('delete from templates where scope=? and key=? and value=?;', (scope, key, origvalue))
-                else:
-                    DB.execute('insert or replace into templates(scope,key,value,updated_by,updated_at) values(?,?,?,?,?);',
-                            (scope, key, value, source.decode('utf-8', 'replace'), int(time.time())))
-        except Exception:
-            DB.rollback()
-            raise
-        else:
-            DB.commit()
-
-        r = get_renderer(channel, source)
-        r[u'키'] = key
-        if value: r[u'값'] = value
-        say(channel, r.render(u'저장후' if value else u'리셋후'))
+    # 템플릿 선언 "얼씨구: 절씨구"
+    m = re.search(ur'^\s*(?:(?P<key>' + KEY_PATTERN + ur')\s*)?:(?P<value>.*)$', msg)
+    if m:
+        key = (m.group('key') or u'').strip()
+        value = m.group('value').strip()
+        if value:
+            original, sep, replacement = value.partition(u'->')
+            if not sep:
+                original, sep, replacement = value.partition(u'\u2192')
+            if u'->' in replacement or u'\u2192' in replacement:
+                say(channel, u'혼동을 방지하기 위해 값에는 화살표가 들어갈 수 없어요.')
+            elif sep:
+                original = original.strip()
+                replacement = replacement.strip()
+                if original:
+                    dbreplace(channel, source, key, original, replacement)
+            else:
+                dbadd(channel, source, key, value)
         return
 
     # 템플릿 나열 "얼씨구??"
-    if msg.endswith(u'??'):
-        key = msg[:-2].strip()
-        if key == u'모든키':
-            c = DB.execute('select distinct key from templates where scope=?;', (scope,))
-        else:
-            c = DB.execute('select value from templates where scope=? and key=?;', (scope, key))
-        items = [i for i, in c.fetchall()]
-        if items:
-            random.shuffle(items)
-            text = u'%s: ' % key
-            first = True
-            for i in items:
-                if len(text) > 100:
-                    text += u' 등등 총 %d개' % len(items)
-                    break
-                if first: first = False
-                else: text += u', '
-                text += i
-        else:
-            r = get_renderer(channel, source)
-            r[u'키'] = key
-            text = r.render(u'없는키') or u'그따위 거 몰라요.'
-        say(channel, text)
+    m = re.search(ur'^\s*(?:(?P<key>' + KEY_PATTERN + ur')\s*)?\?\?\s*$', msg)
+    if m:
+        key = (m.group('key') or u'').strip()
+        dblist(channel, source, key)
         return
 
-    # 템플릿 사용 "얼씨구?" ("?"만 있으면 메인 템플릿)
-    if msg.endswith(u'?'):
-        key = msg[:-1].strip()
-        r = get_renderer(channel, source)
-        text = r.render(key)
-        if not text:
-            r[u'키'] = key
-            text = r.render(u'없는키') or u'그따위 거 몰라요.'
-        say(channel, text)
+    # 기본 템플릿 사용 "?" (특수 처리해야 함)
+    if msg.strip() == u'?':
+        dbget(channel, source, u'')
+        return
+
+    # 템플릿 사용 "얼씨구?" 또는 "얼씨구 <인자들>?"
+    m = re.search(ur'^\s*(?P<key>' + KEY_PATTERN + ur')(?:\s(?P<args>.*))?\?\s*$', msg)
+    if m:
+        key = m.group('key').strip()
+        args = (m.group('args') or u'').split()
+        if key: dbget(channel, source, key, args)
         return
 
     # 기본값
