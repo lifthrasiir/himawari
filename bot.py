@@ -85,27 +85,44 @@ while True:
     if m:
         prefix = m.group('prefix') or ''
         command = m.group('command').lower()
-        param = (m.group('param') or '').split() or ['']
-        message = m.group('message') or ''
+        params = (m.group('param') or '').split()
+        if m.group('message') is not None:
+            params.append(m.group('message'))
+
         if command == '001': # welcome
-            for channel in sys.argv[4:]:
-                send('JOIN %s' % channel)
+            safeexec(None, getattr(botimpl, 'start', None), ())
         elif command == 'ping':
-            send('PONG :%s' % message)
-        elif command == 'invite' and len(param) > 0 and message:
-            send('JOIN %s' % message)
-            safeexec(None, getattr(botimpl, 'welcome', None), (message,))
-        elif command == 'privmsg' and len(param) > 0 and param[0].startswith('#'):
-            if ''.join(message.split()).lower() in ('%s,reload' % NICK, '%s:reload' % NICK):
-                safeexec(param[0], reload, (botimpl,))
-                say(param[0], '재기동했습니다.')
+            if len(params) < 1: continue
+            send('PONG :%s' % params[0])
+        elif command == 'invite':
+            if len(params) < 2: continue
+            # params[0] should be NICK
+            send('JOIN %s' % params[1])
+            safeexec(None, getattr(botimpl, 'welcome', None), (params[1], prefix))
+        elif command == 'privmsg':
+            if len(params) < 2 or not params[0].startswith('#'): continue
+            if ''.join(params[1].split()).lower() in ('%s,reload' % NICK, '%s:reload' % NICK):
+                safeexec(params[0], reload, (botimpl,))
+                say(params[0], '재기동했습니다.')
                 # safeguard
                 if not isinstance(getattr(botimpl, 'TICK', None), int):
                     botimpl.TICK = 10
                 if not isinstance(getattr(botimpl, 'TIMEOUT', None), int):
                     botimpl.TIMEOUT = 5
             else:
-                safeexec(param[0], getattr(botimpl, 'msg', None), (param[0], prefix, message))
+                safeexec(params[0], getattr(botimpl, 'msg', None), (params[0], prefix, params[1]))
+        elif command == 'join':
+            if len(params) < 1: continue
+            safeexec(params[0], getattr(botimpl, 'onenter', None), (params[0], prefix))
+        elif command == 'part' or command == 'quit' or command == 'kill':
+            if len(params) < 1: continue
+            safeexec(params[0], getattr(botimpl, 'onexit', None), (params[0], prefix, command, prefix) + tuple(params[1:2]))
+        elif command == 'kick':
+            if len(params) < 2: continue
+            safeexec(params[0], getattr(botimpl, 'onexit', None), (params[0], prefix, 'kick', params[1]) + tuple(params[2:3]))
+        elif command == 'nick':
+            if len(params) < 1: continue
+            safeexec(None, getattr(botimpl, 'onnickchange', None), (prefix, params[0]))
     while not select.select([s.fileno()], [], [], max(0, nexttime - time.time()))[0]:
         if nexttime < time.time(): nexttime = time.time() + botimpl.TICK
         safeexec(None, getattr(botimpl, 'idle', None))

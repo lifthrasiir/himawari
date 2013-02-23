@@ -32,6 +32,9 @@ DB.executescript('''
         vote integer not null default 0,
         weight integer not null default 100,
         primary key (scope, key, value));
+    create table if not exists channels(
+        channel text not null primary key,
+        active integer not null default 1);
     create table if not exists readings(
         key text not null primary key,
         value text not null);
@@ -435,9 +438,33 @@ def msg(channel, source, msg):
         msg0 = calling_me(msg)
         if msg0 is not None: call(channel, source, msg0)
 
-def welcome(channel):
-    r = get_renderer(channel, None)
+def start():
+    c = DB.execute('select channel from channels where active=1;', ())
+    for channel, in c.fetchall():
+        channel = channel.encode('utf-8')
+        bot.send('JOIN %s' % channel)
+        welcome(channel, None) # 누구한테도 초대받은 게 아니니까...
+
+def welcome(channel, invite_source):
+    r = get_renderer(channel, invite_source)
     reply = r.render(KEYNAME_SELFINTRO) or (u'안녕하세요. 뻘글 생산봇 %s입니다. 저는 \\로 시작하는 말에 반응해요. '
                                             u'자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하시고요.' % bot.NICK.decode('utf-8'))
     say(channel, reply)
+
+def onenter(channel, source):
+    if source.split('!')[0] == bot.NICK:
+        channel = channel.decode('utf-8', 'replace')
+        with transaction():
+            DB.execute('insert or replace into channels(channel,active) values(?,1);', (channel,))
+
+def onexit(channel, source, kind, target, reason=None):
+    if source.split('!')[0] == bot.NICK and target != 'quit':
+        # 자기 의지가 아니라면 데이터베이스에서 내려야 한다.
+        channel = channel.decode('utf-8', 'replace')
+        with transaction():
+            DB.execute('update channels set active=0 where channel=?;', (channel,))
+
+def onnickchange(source, target):
+    if source.split('!')[0] == bot.NICK:
+        bot.NICK = target.split('!')[0]
 
