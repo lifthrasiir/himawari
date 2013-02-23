@@ -458,7 +458,7 @@ def onenter(channel, source):
             DB.execute('insert or replace into channels(channel,active) values(?,1);', (channel,))
 
 def onexit(channel, source, kind, target, reason=None):
-    if source.split('!')[0] == bot.NICK and target != 'quit':
+    if source.split('!')[0] == bot.NICK and kind != 'quit':
         # 자기 의지가 아니라면 데이터베이스에서 내려야 한다.
         channel = channel.decode('utf-8', 'replace')
         with transaction():
