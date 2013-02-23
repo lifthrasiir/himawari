@@ -99,13 +99,13 @@ def select_postposition(text, postpos):
     return postpos
 
 def attach_postposition(text, postpos):
-    alphatext = filter(unicode.isalpha, text).upper()
-    if not alphatext: return text + postpos
-    if not (u'가' <= alphatext[-1] <= u'힣'):
+    filtered = filter(unicode.isalnum, text).upper()
+    if not filtered: return text + postpos
+    if not (u'가' <= filtered[-1] <= u'힣'):
         # 적절한 발음이 존재하는지 확인해 본다.
-        reading = get_reading(alphatext)
-        if reading: alphatext = reading
-    return text + select_postposition(alphatext, postpos)
+        reading = get_reading(filtered)
+        if reading: filtered = reading
+    return text + select_postposition(filtered, postpos)
 
 
 KEY_PATTERN = ur'(?:[가-힣ㄱ-ㅎㅏ-ㅣ0-9a-zA-Z]*[가-힣])'
