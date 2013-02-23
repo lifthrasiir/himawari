@@ -107,6 +107,45 @@ def attach_postposition(text, postpos):
 
 KEY_PATTERN = ur'(?:[가-힣ㄱ-ㅎㅏ-ㅣ0-9a-zA-Z]*[가-힣])'
 
+# 특수 키들
+KEYNAME_KEY        = u'키'
+KEYNAME_VALUE      = u'값'
+KEYNAME_I          = u'나' # 봇을 가리킴
+KEYNAME_YOU        = u'너' # 봇에게 명령을 내린 주체를 가리킴
+KEYNAME_HERE       = u'여기'
+KEYNAME_THISCHAN   = u'이채널'
+KEYNAME_SOMEONE    = u'누군가'
+KEYNAME_IDLE       = u'심심할때'
+KEYNAME_AFTERSAVE  = u'저장후'
+KEYNAME_AFTERRESET = u'리셋후'
+KEYNAME_NOKEY      = u'없는키'
+KEYNAME_ALLKEYS    = u'모든키'
+KEYNAME_USAGE      = u'도움말'
+KEYNAME_INTRO      = u'인사말'
+KEYNAME_DYINGMSG   = u'나갈때'
+KEYNAME_SAY        = u'말해'
+
+READONLY_KEYS = {
+    KEYNAME_I:          u'제 이름을 부르는 용도',
+    KEYNAME_YOU:        u'명령을 내린 사람을 부르는 용도',
+    KEYNAME_HERE:       u'명령을 받은 장소',
+    KEYNAME_THISCHAN:   u'명령을 받은 채널명',
+    KEYNAME_SOMEONE:    u'명령을 받은 채널의 아무 사람이나 부르는 용도', # TODO
+    KEYNAME_ALLKEYS:    u'전체 키 목록을 출력하는 용도',
+    KEYNAME_SAY:        u'저장 없이 문법을 테스트하는 용도', # TODO
+}
+SPECIAL_KEYS = {
+    KEYNAME_KEY:        u'종종 입력한 키로 덮어 씌우는 용도',
+    KEYNAME_VALUE:      u'종종 입력한 값으로 덮어 씌우는 용도',
+    KEYNAME_IDLE:       u'일정한 주기로 아무 말이나 출력시키기 위한 용도',
+    KEYNAME_AFTERSAVE:  u'값을 저장한 뒤에 나올 메시지',
+    KEYNAME_AFTERRESET: u'값을 지운 뒤에 나올 메시지',
+    KEYNAME_NOKEY:      u'값이 없을 때 나올 메시지',
+    KEYNAME_INTRO:      u'채널에 초대받았을 때 인사말',
+    KEYNAME_DYINGMSG:   u'채널에서 나갈때 나올 메시지',
+    KEYNAME_USAGE:      u'도움말',
+}
+
 class Renderer(object):
     def __init__(self, scope, context=()):
         self.scope = scope
@@ -217,7 +256,7 @@ def idle():
     t = int(time.time())
     if lastchannel and (lastidlesay is None or lastidlesay + 3600 < t):
         lastidlesay = t
-        say(lastchannel, get_renderer(lastchannel, None).render(u'심심할때'))
+        say(lastchannel, get_renderer(lastchannel, None).render(KEYNAME_IDLE))
 
 def dbadd(channel, source, key, value):
     assert value
@@ -227,10 +266,14 @@ def dbadd(channel, source, key, value):
         DB.execute('insert or replace into templates(scope,key,value,updated_by,updated_at) values(?,?,?,?,?);',
                 (scope, key, value, source.decode('utf-8', 'replace'), int(time.time())))
 
-    r = get_renderer(channel, source)
-    r[u'키'] = key
-    r[u'값'] = value
-    say(channel, r.render(u'저장후'))
+    if key in SPECIAL_KEYS:
+        say(channel, u'이 키는 %s 쓰여요. 원하는 게 맞는지 다시 확인해 보세요.' %
+                     attach_postposition(SPECIAL_KEYS[key], u'로'))
+    else:
+        r = get_renderer(channel, source)
+        r[KEYNAME_KEY] = key
+        r[KEYNAME_VALUE] = value
+        say(channel, r.render(KEYNAME_AFTERSAVE))
 
 def dbreplace(channel, source, key, original, replacement):
     # '절씨구'를 포함하는 문자열이 여럿 있으면 에러.
@@ -260,14 +303,18 @@ def dbreplace(channel, source, key, original, replacement):
         else:
             DB.execute('delete from templates where scope=? and key=? and value=?;', (scope, key, origvalue))
 
-    r = get_renderer(channel, source)
-    r[u'키'] = key
-    if value: r[u'값'] = value
-    say(channel, r.render(u'저장후' if value else u'리셋후'))
+    if key in SPECIAL_KEYS:
+        say(channel, u'이 키는 %s 쓰여요. 원하는 게 맞는지 다시 확인해 보세요.' %
+                     attach_postposition(SPECIAL_KEYS[key], u'로'))
+    else:
+        r = get_renderer(channel, source)
+        r[KEYNAME_KEY] = key
+        if value: r[KEYNAME_VALUE] = value
+        say(channel, r.render(KEYNAME_AFTERSAVE if value else KEYNAME_AFTERRESET))
 
 def dblist(channel, source, key):
     scope = channel_scope(channel)
-    if key == u'모든키':
+    if key == KEYNAME_ALLKEYS:
         c = DB.execute('select distinct key from templates where scope=?;', (scope,))
     else:
         c = DB.execute('select value from templates where scope=? and key=?;', (scope, key))
@@ -285,8 +332,8 @@ def dblist(channel, source, key):
             text += i
     else:
         r = get_renderer(channel, source)
-        r[u'키'] = key
-        text = r.render(u'없는키') or u'그따위 거 몰라요.'
+        r[KEYNAME_KEY] = key
+        text = r.render(KEYNAME_NOKEY) or u'그따위 거 몰라요.'
     say(channel, text)
 
 def dbget(channel, source, key, args=()):
@@ -295,14 +342,13 @@ def dbget(channel, source, key, args=()):
         r[u'$%d' % (i+1)] = arg
     text = r.render(key)
     if not text:
-        r[u'키'] = key
-        text = r.render(u'없는키') or u'그따위 거 몰라요.'
+        r[KEYNAME_KEY] = key
+        text = r.render(KEYNAME_NOKEY) or u'그따위 거 몰라요.'
     say(channel, text)
 
 def dbcmd(channel, source, msg):
     global lastchannel
     lastchannel = channel
-    scope = channel.decode('utf-8', 'replace')
 
     # 템플릿 전체 삭제 "얼씨구 ->"
     # TODO
@@ -313,18 +359,21 @@ def dbcmd(channel, source, msg):
         key = (m.group('key') or u'').strip()
         value = m.group('value').strip()
         if value:
-            original, sep, replacement = value.partition(u'->')
-            if not sep:
-                original, sep, replacement = value.partition(u'\u2192')
-            if u'->' in replacement or u'\u2192' in replacement:
-                say(channel, u'혼동을 방지하기 위해 값에는 화살표가 들어갈 수 없어요.')
-            elif sep:
-                original = original.strip()
-                replacement = replacement.strip()
-                if original:
-                    dbreplace(channel, source, key, original, replacement)
+            if key in READONLY_KEYS:
+                say(channel, u'이 키는 %s 쓰이기 때문에 저장할 수 없어요.' %
+                             attach_postposition(READONLY_KEYS[key], u'로'))
             else:
-                dbadd(channel, source, key, value)
+                original, sep, replacement = value.partition(u'->')
+                if not sep: original, sep, replacement = value.partition(u'\u2192')
+                if u'->' in replacement or u'\u2192' in replacement:
+                    say(channel, u'혼동을 방지하기 위해 값에는 화살표가 들어갈 수 없어요.')
+                elif sep:
+                    original = original.strip()
+                    replacement = replacement.strip()
+                    if original:
+                        dbreplace(channel, source, key, original, replacement)
+                else:
+                    dbadd(channel, source, key, value)
         return
 
     # 템플릿 나열 "얼씨구??"
@@ -348,13 +397,14 @@ def dbcmd(channel, source, msg):
         return
 
     # 기본값
-    r = get_renderer(channel, None)
-    #say(channel, r.render(u'도움말') or u'나도 내가 뭐 하는 건지 잘 모르겠어요.')
-    say(channel, r.render(u'도움말') or u'잘 모르겠으면 우선 http://cosmic.mearie.org/f/himawari/ 부터 보세요.')
+    r = get_renderer(channel, source)
+    say(channel, r.render(KEYNAME_USAGE) or u'잘 모르겠으면 우선 http://cosmic.mearie.org/f/himawari/ 부터 보세요.')
 
 def call(channel, source, msg):
     if u'꺼져' in msg or u'나가' in msg:
-        bot.send('PART %s :%s' % (channel, u'사쿠라코는 오늘 점심 없어요.'.encode('utf-8')))
+        r = get_renderer(channel, None)
+        reply = r.render(KEYNAME_DYINGMSG) or u'사쿠라코는 오늘 점심 없어요.'
+        bot.send('PART %s :%s' % (channel, reply.encode('utf-8')))
     else:
         say(channel, u'%s 뻘글 생산봇입니다. 자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하세요.' %
                 attach_postposition(bot.NICK.decode('utf-8'), u'는'))
@@ -368,5 +418,8 @@ def msg(channel, source, msg):
         if msg0 is not None: call(channel, source, msg0)
 
 def welcome(channel):
-    bot.say(channel, '안녕하세요. 뻘글 생산봇 %s입니다. 저는 \\로 시작하는 말에 반응해요. 자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하시고요.' % bot.NICK)
+    r = get_renderer(channel, None)
+    reply = r.render(KEYNAME_INTRO) or (u'안녕하세요. 뻘글 생산봇 %s입니다. 저는 \\로 시작하는 말에 반응해요. '
+                                        u'자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하시고요.' % bot.NICK.decode('utf-8'))
+    say(channel, reply)
 
