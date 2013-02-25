@@ -21,7 +21,9 @@ from contextlib import contextmanager
 if __name__ != '__main__':
     import bot # recursive, but only called in the handler
 
-DB = sqlite3.connect(os.path.join(os.path.dirname(__file__), 'db', 'himawari.db'))
+if not hasattr(bot, 'DBPATH'): # legacy
+    bot.DBPATH = os.path.join(os.path.dirname(__file__), 'db', 'himawari.db')
+DB = sqlite3.connect(bot.DBPATH)
 DB.executescript('''
     create table if not exists templates(
         scope text not null,

@@ -14,11 +14,12 @@ import time
 import signal
 import traceback
 
-if len(sys.argv) < 4:
-    print >>sys.stderr, 'Usage: python %s <host> <port> <nick>' % sys.argv[0]
+if len(sys.argv) < 5:
+    print >>sys.stderr, 'Usage: python %s <host> <port> <nick> <dbpath>' % sys.argv[0]
     raise SystemExit(1)
 
 sys.modules['bot'] = sys.modules['__main__']
+DBPATH = sys.argv[4]
 import botimpl # requires certain APIs
 
 LINEPARSE = re.compile("^(:(?P<prefix>[^ ]+) +)?(?P<command>[^ ]+)(?P<param>( +[^:][^ ]*)*)(?: +:(?P<message>.*))?$")
