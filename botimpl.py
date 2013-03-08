@@ -313,7 +313,7 @@ def dbreplace(channel, source, key, original, replacement):
                 return
         else:
             origvalue = rows[0][0]
-        value = origvalue.replace(original, replacement)
+        value = origvalue.replace(original, replacement).strip()
         if value:
             DB.execute('update or replace templates set value=?, updated_by=?, updated_at=? '
                        'where scope=? and key=? and value=?;',
