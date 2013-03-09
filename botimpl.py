@@ -235,7 +235,7 @@ class Renderer(object):
         return text
 
 def channel_scope(channel):
-    return channel.decode('utf-8', 'replace')
+    return channel.decode('utf-8', 'replace').lower()
 
 def get_renderer(channel, source):
     vars = {
@@ -481,14 +481,14 @@ def welcome(channel, invite_source):
 
 def onenter(channel, source):
     if source.split('!')[0] == bot.NICK:
-        channel = channel.decode('utf-8', 'replace')
+        channel = channel.decode('utf-8', 'replace').lower()
         with transaction():
             DB.execute('insert or replace into channels(channel,active) values(?,1);', (channel,))
 
 def onexit(channel, source, kind, target, reason=None):
     if source.split('!')[0] == bot.NICK and kind != 'quit':
         # 자기 의지가 아니라면 데이터베이스에서 내려야 한다.
-        channel = channel.decode('utf-8', 'replace')
+        channel = channel.decode('utf-8', 'replace').lower()
         with transaction():
             DB.execute('update channels set active=0 where channel=?;', (channel,))
 
