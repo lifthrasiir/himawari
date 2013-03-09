@@ -276,13 +276,16 @@ def idle():
         lastidlesay = t
         say(lastchannel, get_renderer(lastchannel, None).render(KEYNAME_IDLE))
 
-def dbadd(channel, source, key, value):
-    assert value
+def dbadd(channel, source, key, values):
+    values = filter(None, values)
+    if not values: return
 
     scope = channel_scope(channel)
     with transaction():
-        DB.execute('insert or replace into templates(scope,key,value,updated_by,updated_at) values(?,?,?,?,?);',
-                (scope, key, value, source.decode('utf-8', 'replace'), int(time.time())))
+        updated_by = source.decode('utf-8', 'replace')
+        updated_at = int(time.time())
+        args = [(scope, key, value, updated_by, updated_at) for value in values]
+        DB.executemany('insert or replace into templates(scope,key,value,updated_by,updated_at) values(?,?,?,?,?);', args)
 
     if key in SPECIAL_KEYS:
         say(channel, u'이 키는 %s 쓰여요. 저장은 되었지만 원하는 게 맞는지 다시 확인해 보세요.' %
@@ -290,10 +293,17 @@ def dbadd(channel, source, key, value):
     else:
         r = get_renderer(channel, source)
         r[KEYNAME_KEY] = key
-        r[KEYNAME_VALUE] = value
+        r[KEYNAME_VALUE] = value[0] + (u' 등' if len(values) > 1 else u'')
         say(channel, r.render(KEYNAME_AFTERSAVE))
 
-def dbreplace(channel, source, key, original, replacement):
+def dbreplace(channel, source, key, originals, replacements):
+    if not originals: return
+    if len(originals) > 1 or len(replacements) > 1:
+        say(channel, u'여러 값을 동시에 바꾸거나 지우는 건 아직 지원하지 않아요.')
+        return
+    original, = originals
+    replacement, = replacements or [u'']
+
     # '절씨구'를 포함하는 문자열이 여럿 있으면 에러.
     # 빈 문자열로 치환될 경우 delete.
     scope = channel_scope(channel)
@@ -375,7 +385,17 @@ def dbcmd(channel, source, msg):
     m = re.search(ur'^\s*(?:(?P<key>' + KEY_PATTERN + ur')\s*)?:(?P<value>.*)$', msg)
     if m:
         key = (m.group('key') or u'').strip()
-        value = m.group('value').strip()
+        value = m.group('value')
+        if value.startswith(u':'): # 구분자는 공백 없이 시작해야 함
+            value = value[1:]
+            splitfunc = lambda s: s.split()
+        elif value.startswith(u'/'):
+            value = value[1:]
+            splitfunc = lambda s: map(unicode.strip, s.split(u'/'))
+        else:
+            splitfunc = lambda s: [s.strip()] if s.strip() else []
+
+        value = value.strip()
         if value:
             if key == KEYNAME_SAY:
                 r = get_renderer(channel, source)
@@ -389,12 +409,12 @@ def dbcmd(channel, source, msg):
                 if u'->' in replacement or u'\u2192' in replacement:
                     say(channel, u'혼동을 방지하기 위해 값에는 화살표가 들어갈 수 없어요.')
                 elif sep:
-                    original = original.strip()
-                    replacement = replacement.strip()
-                    if original:
-                        dbreplace(channel, source, key, original, replacement)
+                    originals = splitfunc(original)
+                    replacements = splitfunc(replacement)
+                    dbreplace(channel, source, key, originals, replacements)
                 else:
-                    dbadd(channel, source, key, value)
+                    values = splitfunc(original)
+                    dbadd(channel, source, key, values)
         return
 
     # 템플릿 나열 "얼씨구??"
