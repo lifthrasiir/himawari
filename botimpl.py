@@ -371,7 +371,7 @@ def dbget(channel, source, key, args=()):
     text = r.render(key)
     if not text:
         r[KEYNAME_KEY] = key
-        text = r.render(KEYNAME_NOKEY) or u'그따위 거 몰라요.'
+        text = r.render(KEYNAME_NOKEY, default=u'그따위 거 몰라요.')
     say(channel, text)
 
 def dbcmd(channel, source, msg):
@@ -447,12 +447,12 @@ def dbcmd(channel, source, msg):
 
     # 기본값
     r = get_renderer(channel, source)
-    say(channel, r.render(KEYNAME_USAGE) or u'잘 모르겠으면 우선 http://cosmic.mearie.org/f/himawari/ 부터 보세요.')
+    say(channel, r.render(KEYNAME_USAGE, default=u'잘 모르겠으면 우선 http://cosmic.mearie.org/f/himawari/ 부터 보세요.'))
 
 def call(channel, source, msg):
     if u'꺼져' in msg or u'나가' in msg:
         r = get_renderer(channel, None)
-        reply = r.render(KEYNAME_DYINGMSG) or u'사쿠라코는 오늘 점심 없어요.'
+        reply = r.render(KEYNAME_DYINGMSG, default=u'사쿠라코는 오늘 점심 없어요.')
         bot.send('PART %s :%s' % (channel, reply.encode('utf-8')))
     else:
         say(channel, u'%s 뻘글 생산봇입니다. 자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하세요.' %
@@ -475,8 +475,9 @@ def start():
 
 def welcome(channel, invite_source):
     r = get_renderer(channel, invite_source)
-    reply = r.render(KEYNAME_SELFINTRO) or (u'안녕하세요. 뻘글 생산봇 %s입니다. 저는 \\로 시작하는 말에 반응해요. '
-                                            u'자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하시고요.' % bot.NICK.decode('utf-8'))
+    reply = r.render(KEYNAME_SELFINTRO,
+                     default=u'안녕하세요. 뻘글 생산봇 %s입니다. 저는 \\로 시작하는 말에 반응해요. '
+                             u'자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하시고요.' % bot.NICK.decode('utf-8'))
     say(channel, reply)
 
 def onenter(channel, source):
