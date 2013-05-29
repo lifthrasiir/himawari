@@ -3,7 +3,7 @@
 #
 # Himawari: Intelligent Mocking Agent for Writing Arbitrary Rants to IRC
 # Written by Kang Seonghoon. Dedicated to the Public Domain.
-# http://cosmic.mearie.org/f/himawari/
+# http://himawari.mearie.org/
 #
 
 import sys

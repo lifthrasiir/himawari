@@ -2,7 +2,7 @@
 #
 # Himawari: Intelligent Mocking Agent for Writing Arbitrary Rants to IRC
 # Written by Kang Seonghoon. Dedicated to the Public Domain.
-# http://cosmic.mearie.org/f/himawari/
+# http://himawari.mearie.org/
 #
 
 TICK = 30
@@ -447,7 +447,7 @@ def dbcmd(channel, source, msg):
 
     # 기본값
     r = get_renderer(channel, source)
-    say(channel, r.render(KEYNAME_USAGE, default=u'잘 모르겠으면 우선 http://cosmic.mearie.org/f/himawari/ 부터 보세요.'))
+    say(channel, r.render(KEYNAME_USAGE, default=u'잘 모르겠으면 우선 http://himawari.mearie.org/ 부터 보세요.'))
 
 def call(channel, source, msg):
     if u'꺼져' in msg or u'나가' in msg:
@@ -455,7 +455,7 @@ def call(channel, source, msg):
         reply = r.render(KEYNAME_DYINGMSG, default=u'사쿠라코는 오늘 점심 없어요.')
         bot.send('PART %s :%s' % (channel, reply.encode('utf-8')))
     else:
-        say(channel, u'%s 뻘글 생산봇입니다. 자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하세요.' %
+        say(channel, u'%s 뻘글 생산봇입니다. 자세한 사용법은 http://himawari.mearie.org/ 를 참고하세요.' %
                 attach_postposition(bot.NICK.decode('utf-8'), u'는'))
 
 def msg(channel, source, msg):
@@ -477,7 +477,7 @@ def welcome(channel, invite_source):
     r = get_renderer(channel, invite_source)
     reply = r.render(KEYNAME_SELFINTRO,
                      default=u'안녕하세요. 뻘글 생산봇 %s입니다. 저는 \\로 시작하는 말에 반응해요. '
-                             u'자세한 사용법은 http://cosmic.mearie.org/f/himawari/ 를 참고하시고요.' % bot.NICK.decode('utf-8'))
+                             u'자세한 사용법은 http://himawari.mearie.org/ 를 참고하시고요.' % bot.NICK.decode('utf-8'))
     say(channel, reply)
 
 def onenter(channel, source):
