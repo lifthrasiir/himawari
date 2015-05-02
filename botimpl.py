@@ -293,7 +293,7 @@ def dbadd(channel, source, key, values):
     else:
         r = get_renderer(channel, source)
         r[KEYNAME_KEY] = key
-        r[KEYNAME_VALUE] = value[0] + (u' 등' if len(values) > 1 else u'')
+        r[KEYNAME_VALUE] = values[0] + (u' 등' if len(values) > 1 else u'')
         say(channel, r.render(KEYNAME_AFTERSAVE))
 
 def dbreplace(channel, source, key, originals, replacements):
